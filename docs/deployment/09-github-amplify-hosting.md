@@ -51,5 +51,7 @@ Data and Cognito users in **sandbox** are **not** the same as in **pipeline** en
 
 ## Troubleshooting
 
+- **Backend build hangs or fails right after `nvm install 20`** (log shows `npm install -g @aws-amplify/cli bower cypress ...`): Amplify’s CodeBuild image configures NVM **default-packages**, so every `nvm install` pulls in huge global packages and often **times out or runs out of memory**. Fix: do **not** run `nvm install` in `amplify.yml`; use **`_LIVE_UPDATES`** to pin Node 20 (see root `amplify.yml` in this repo).
 - **Build fails on `pipeline-deploy`**: check the Amplify **service role** has CloudFormation and IAM permissions; confirm **Secrets Manager** secrets exist in the app region.
+- **`npm ci` fails**: ensure **`package-lock.json`** is committed at the **repo root** and under **`frontend/`** (this repository includes both).
 - **Frontend builds but API errors**: confirm `amplify_outputs.json` is produced in the backend phase (Gen 2 does this before the frontend build uses the repo root file). Ensure the frontend resolves config from repo-root `amplify_outputs.json` (this project does via `frontend/src/lib/amplify-client.ts`).
