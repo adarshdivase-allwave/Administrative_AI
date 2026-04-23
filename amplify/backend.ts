@@ -40,6 +40,7 @@ import { createSesTemplates } from "./custom/ses-templates.js";
 import { createSecretReferences } from "./custom/secrets.js";
 import { createOpenSearchCollection } from "./custom/opensearch.js";
 import { createWafWebAcl } from "./custom/waf.js";
+import { wireLambdaDataAccess } from "./custom/lambda-data-access.js";
 import type { MinimalBackend } from "./custom/_backend-types.js";
 import { PolicyStatement } from "aws-cdk-lib/aws-iam";
 
@@ -75,10 +76,19 @@ const backend = defineBackend({
 const b = backend as unknown as MinimalBackend;
 
 applyDynamoHardening(b);
+wireLambdaDataAccess(b); // grant Lambdas DynamoDB IAM + inject table-name env vars
 createEventBridgeSchedules(b);
 createSesTemplates(b);
 createSecretReferences(b);
-createOpenSearchCollection(b);
+
+// OpenSearch Serverless is expensive (~$180/mo idle for min 4 OCUs).
+// It's OFF by default — HSN lookup uses DynamoDB (seed via seed-hsn.ts)
+// and chatbot RAG uses keyword DynamoDB scans + Gemini's 1M-token context.
+// Set USE_OPENSEARCH=1 in your deploy env to enable the premium path.
+if (process.env.USE_OPENSEARCH === "1") {
+  createOpenSearchCollection(b);
+}
+
 createWafWebAcl(b);
 
 // Grant the user-admin Lambda Cognito admin permissions scoped to THIS user

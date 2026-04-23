@@ -26,7 +26,8 @@ beforeEach(() => {
   _resetClientsForTests();
   _clearSecretsCacheForTests();
   globalThis.fetch = originalFetch;
-  process.env.EXCHANGE_RATE_SECRET_ID = "test/exchange-key";
+  // Force the default keyless path — no secret env var needed.
+  delete process.env.EXCHANGE_RATE_SECRET_ID;
   process.env.AWS_REGION = "ap-south-1";
 });
 
@@ -59,16 +60,13 @@ describe("forex-rate-fetcher", () => {
     ddbMock.on(ScanCommand).resolves({ Items: [] });
     ddbMock.on(PutCommand).resolves({});
 
-    secretsMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({ apiKey: "test-key" }),
-    });
-
-    stubFetch({ result: "success", conversion_rate: 84.12 });
+    // open.er-api.com response shape: { result, rates: { INR, ... } }
+    stubFetch({ result: "success", rates: { INR: 84.12 } });
 
     const out = await handler({ quoteCurrency: "EUR" });
 
     expect(out.cacheHit).toBe(false);
-    expect(out.source).toBe("exchangerate-api");
+    expect(out.source).toBe("open.er-api.com");
     expect(out.rate).toBe(84.12);
     expect(ddbMock.commandCalls(PutCommand).length).toBe(1);
   });
@@ -88,10 +86,7 @@ describe("forex-rate-fetcher", () => {
     });
     ddbMock.on(QueryCommand).rejects(new Error("no GSI"));
     ddbMock.on(PutCommand).resolves({});
-    secretsMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({ apiKey: "test-key" }),
-    });
-    stubFetch({ result: "success", conversion_rate: 84.0 });
+    stubFetch({ result: "success", rates: { INR: 84.0 } });
 
     const out = await handler({ quoteCurrency: "USD", forceRefresh: true });
     expect(out.cacheHit).toBe(false);
@@ -111,10 +106,7 @@ describe("forex-rate-fetcher", () => {
   it("rejects implausible API responses", async () => {
     ddbMock.on(ScanCommand).resolves({ Items: [] });
     ddbMock.on(QueryCommand).rejects(new Error("no GSI"));
-    secretsMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({ apiKey: "test-key" }),
-    });
-    stubFetch({ result: "success", conversion_rate: 9999 });
+    stubFetch({ result: "success", rates: { INR: 9999 } });
 
     const err = await handler({ quoteCurrency: "GBP" }).catch((e: Error) => e.message);
     expect(err).toMatch(/implausible/i);
@@ -123,9 +115,6 @@ describe("forex-rate-fetcher", () => {
   it("surfaces API error envelopes", async () => {
     ddbMock.on(ScanCommand).resolves({ Items: [] });
     ddbMock.on(QueryCommand).rejects(new Error("no GSI"));
-    secretsMock.on(GetSecretValueCommand).resolves({
-      SecretString: JSON.stringify({ apiKey: "test-key" }),
-    });
     stubFetch({ result: "error", "error-type": "invalid-key" });
 
     const err = await handler({ quoteCurrency: "USD" }).catch((e: Error) => e.message);

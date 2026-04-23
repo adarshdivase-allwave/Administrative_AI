@@ -1,5 +1,5 @@
 /**
- * invoice-scheduler — creates the 8-stage EventBridge Scheduler set for an invoice.
+ * invoice-scheduler â€” creates the 8-stage EventBridge Scheduler set for an invoice.
  *
  * Invoked on invoice CRUD events (AppSync mutation resolver, or DynamoDB stream):
  *   - CREATE / SENT:   create all 8 schedules
@@ -57,7 +57,9 @@ const STAGES: Array<{ name: string; offsetDays: number }> = [
   { name: "T_PLUS_45", offsetDays: 45 },
 ];
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<Output> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.invoiceId) throw new Error("invoiceId is required");
   if (!event.action) throw new Error("action is required (CREATE | UPDATE | CANCEL)");
 
@@ -130,6 +132,6 @@ export const handler = async (event: Input): Promise<Output> => {
 
 function requiredEnv(key: string): string {
   const v = process.env[key];
-  if (!v) throw new Error(`${key} env var not set — invoice-scheduler misconfigured`);
+  if (!v) throw new Error(`${key} env var not set â€” invoice-scheduler misconfigured`);
   return v;
 }

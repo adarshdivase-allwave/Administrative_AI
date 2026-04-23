@@ -1,5 +1,5 @@
 /**
- * reminder-dispatcher — dual mode:
+ * reminder-dispatcher â€” dual mode:
  *
  *   MODE = "SYNC_SCHEDULES" (called from Reminder CRUD mutations):
  *     - UPSERT: creates/updates the EventBridge schedule for the Reminder
@@ -51,7 +51,9 @@ interface UserRow {
   givenName?: string;
 }
 
-export const handler = async (event: Input): Promise<{ action: string }> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<{ action: string }> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.reminderId || !event.mode) {
     throw new Error("reminderId and mode are required");
   }
@@ -175,7 +177,7 @@ function nextOccurrence(prev: Date, expr: string): Date | null {
   if (e === "DAILY") return addDays(prev, 1);
   if (e === "WEEKLY") return addWeeks(prev, 1);
   if (e === "MONTHLY") return addMonths(prev, 1);
-  // Full cron support deferred — operators set DAILY/WEEKLY/MONTHLY for now.
+  // Full cron support deferred â€” operators set DAILY/WEEKLY/MONTHLY for now.
   return null;
 }
 

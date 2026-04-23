@@ -7,5 +7,5 @@ export const warrantyAlertMonthly = defineFunction({
   architecture: "arm64",
   timeoutSeconds: 300,
   memoryMB: 1024,
-  environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
+    environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
 });

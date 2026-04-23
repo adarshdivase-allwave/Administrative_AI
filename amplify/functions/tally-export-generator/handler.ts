@@ -1,5 +1,5 @@
 /**
- * tally-export-generator — emits TallyPrime XML for a GRN or a DC and uploads
+ * tally-export-generator â€” emits TallyPrime XML for a GRN or a DC and uploads
  * the file to S3 under `tally-exports/` with a 15-min pre-signed download URL.
  *
  * Input (AppSync resolver):
@@ -20,7 +20,7 @@
  *   - Any line item has a Tally-incompatible HSN
  *   - GRN/DC is in DRAFT status
  * Error responses carry a `code` field the frontend uses to deep-link to
- * System Settings → Tally Integration for easy correction.
+ * System Settings â†’ Tally Integration for easy correction.
  */
 import { randomUUID } from "node:crypto";
 import { PutObjectCommand, GetObjectCommand } from "@aws-sdk/client-s3";
@@ -80,13 +80,15 @@ const getBucket = (): string => {
   if (!b) {
     throw new TallyExportError(
       "BUCKET_NOT_CONFIGURED",
-      "PRIVATE_BUCKET_NAME env var is not set — Amplify storage hasn't been wired to this Lambda.",
+      "PRIVATE_BUCKET_NAME env var is not set â€” Amplify storage hasn't been wired to this Lambda.",
     );
   }
   return b;
 };
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<Output> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event || !event.kind) {
     throw new TallyExportError("INVALID_INPUT", "`kind` is required (GRN | DC)");
   }
@@ -95,7 +97,7 @@ export const handler = async (event: Input): Promise<Output> => {
   if (!settings) {
     throw new TallyExportError(
       "SETTINGS_MISSING",
-      "SystemSettings row not found — complete System Settings before exporting to Tally.",
+      "SystemSettings row not found â€” complete System Settings before exporting to Tally.",
     );
   }
   const ledgerMap = buildLedgerMap(settings);
@@ -172,7 +174,7 @@ export const handler = async (event: Input): Promise<Output> => {
 async function readSettings(): Promise<SettingsRow | null> {
   // SystemSettings is conceptually a single-row table. Amplify creates a
   // standard (id) PK, so we scan for the first row. If more than one exists
-  // it's a configuration error — the Admin UI should enforce one row.
+  // it's a configuration error â€” the Admin UI should enforce one row.
   const { scanItems } = await import("../_lib/ddb.js");
   const rows = await scanItems<SettingsRow>("SystemSettings", { Limit: 1 });
   return rows[0] ?? null;
@@ -205,7 +207,7 @@ async function buildGrnXml(
   }>("GoodsReceivedNote", { id: grnId });
   if (!grn) throw new TallyExportError("GRN_NOT_FOUND", `GRN ${grnId} not found`);
 
-  // Pull all units received under this GRN — each is one physical unit.
+  // Pull all units received under this GRN â€” each is one physical unit.
   // We aggregate by (productId, hsn) for Tally stock-item lines.
   const units = await queryItems<{
     productId: string;
@@ -287,13 +289,13 @@ async function buildDcXml(
   if (dc.status === "DRAFT") {
     throw new TallyExportError(
       "DC_DRAFT",
-      `DC ${dc.dcNumber} is still in DRAFT — dispatch it before exporting to Tally`,
+      `DC ${dc.dcNumber} is still in DRAFT â€” dispatch it before exporting to Tally`,
     );
   }
   if (!dc.clientId) {
     throw new TallyExportError(
       "DC_NO_CLIENT",
-      `DC ${dc.dcNumber} has no clientId — cannot map to a Tally ledger`,
+      `DC ${dc.dcNumber} has no clientId â€” cannot map to a Tally ledger`,
     );
   }
 

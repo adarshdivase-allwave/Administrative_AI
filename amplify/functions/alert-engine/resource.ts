@@ -7,7 +7,7 @@ export const alertEngine = defineFunction({
   architecture: "arm64",
   timeoutSeconds: 300,
   memoryMB: 1024,
-  environment: {
+    environment: {
     APP_ENV: process.env.APP_ENV ?? "dev",
   },
 });

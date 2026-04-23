@@ -1,5 +1,5 @@
 /**
- * invoice-confirmation-scheduler — two responsibilities:
+ * invoice-confirmation-scheduler â€” two responsibilities:
  *
  *   1. MODE = "CREATE" (called on invoice SENT):
  *      Creates 3 EventBridge schedules targeting this same Lambda in
@@ -60,7 +60,9 @@ interface ConfirmationRow {
   confirmationToken?: string;
 }
 
-export const handler = async (event: Input): Promise<{ action: string; details?: unknown }> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<{ action: string; details?: unknown }> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.invoiceId || !event.mode) {
     throw new Error("invoiceId and mode are required");
   }
@@ -89,7 +91,7 @@ async function createSchedules(
   invoice: InvoiceRow,
   actorUserId?: string,
 ): Promise<{ action: "created"; details: unknown }> {
-  // Idempotency — if a confirmation row already exists, we're rescheduling.
+  // Idempotency â€” if a confirmation row already exists, we're rescheduling.
   const existing = await queryItems<ConfirmationRow>("InvoiceConfirmation", {
     IndexName: undefined,
     KeyConditionExpression: "invoiceId = :i",
@@ -176,7 +178,7 @@ async function fireStage(
 
   const conf = confs[0];
   if (!conf) {
-    console.warn(`[invoice-confirmation] no confirmation row for ${invoice.id} — skipping`);
+    console.warn(`[invoice-confirmation] no confirmation row for ${invoice.id} â€” skipping`);
     return { action: "skipped", details: "no_confirmation_row" };
   }
   if (conf.status === "CONFIRMED") {

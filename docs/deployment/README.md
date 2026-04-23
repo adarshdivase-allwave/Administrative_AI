@@ -10,6 +10,7 @@ Walk through these in order for a first-time deploy:
 6. [**06 — Annual HSN refresh**](./06-annual-hsn-refresh.md) — the Feb/Mar budget-day procedure
 7. [**07 — MSME onboarding**](./07-msme-onboarding.md) — MSMED Act 2006 compliance setup
 8. [**08 — Lambda reference**](./08-lambda-reference.md) — invoke examples for every on-demand Lambda
+9. [**09 — GitHub + Amplify Hosting (CI/CD)**](./09-github-amplify-hosting.md) — connect the repo so every push deploys backend + frontend
 
 Additional assets:
 - [`../av-inventory.postman_collection.json`](../av-inventory.postman_collection.json) — Postman collection, all AppSync operations

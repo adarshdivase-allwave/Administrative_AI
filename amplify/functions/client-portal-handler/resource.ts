@@ -7,5 +7,5 @@ export const clientPortalHandler = defineFunction({
   architecture: "arm64",
   timeoutSeconds: 30,
   memoryMB: 512,
-  environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
+    environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
 });

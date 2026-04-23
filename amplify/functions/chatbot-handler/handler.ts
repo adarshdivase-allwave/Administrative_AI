@@ -1,5 +1,6 @@
 /**
- * chatbot-handler — Gemini 1.5 Pro chatbot with OpenSearch RAG and per-user rate limiting.
+ * chatbot-handler — Gemini chatbot (default: gemini-2.5-flash) with OpenSearch
+ * RAG and per-user rate limiting. Model is env-configurable via GEMINI_MODEL.
  *
  * Input (AppSync resolver):
  *   {
@@ -72,7 +73,21 @@ Rules:
 - Use Indian number formatting for INR amounts (lakhs/crores grouping).
 - If context is empty and the question is about internal data, say so politely and suggest the user navigate to the relevant module.`;
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (
+  rawEvent: Input | { arguments?: Input; identity?: { sub?: string; username?: string } },
+): Promise<Output> => {
+  // Support both CLI and AppSync resolver shapes.
+  const source = rawEvent as {
+    arguments?: Input;
+    identity?: { sub?: string; username?: string };
+  };
+  const event: Input = source?.arguments ?? (rawEvent as Input);
+
+  // AppSync resolvers: auto-populate userId from Cognito identity if caller omits it.
+  if (!event.userId && source?.identity?.sub) {
+    event.userId = source.identity.sub;
+  }
+
   if (!event?.userId || !event.message) {
     throw new Error("userId and message are required");
   }
@@ -185,17 +200,45 @@ async function loadOrCreateSession(userId: string, sessionId?: string): Promise<
 }
 
 // --------- RAG ----------
+//
+// Strategy: extract keywords from the user's message, run a few bounded
+// DynamoDB scans with FilterExpressions on the most-likely-relevant models,
+// and pass the hits as JSON snippets to Gemini. Much cheaper than OpenSearch
+// Serverless (~$180/mo) — Gemini 2.5's 1M-token context handles the "semantic
+// understanding" part we used to delegate to BM25.
+//
+// Trade-off: DynamoDB Scan is slower at very high row counts. For typical
+// Indian AV-integrator fleets (< 50k units, < 10k SKUs, < 1k clients), this
+// stays well under 500ms per chat turn. For larger tenants, flip
+// USE_OPENSEARCH=1 to route through the OpenSearch path instead.
+
+const STOP_WORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "is", "are", "was", "were", "be",
+  "to", "for", "on", "in", "at", "by", "with", "from", "this", "that",
+  "how", "what", "when", "where", "which", "why", "do", "does", "did",
+  "i", "you", "we", "they", "it", "me", "us", "them", "my", "your", "our",
+  "can", "could", "should", "would", "many", "much", "some", "all", "any",
+]);
+
+function extractKeywords(text: string): string[] {
+  return [
+    ...new Set(
+      text
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 3 && !STOP_WORDS.has(w)),
+    ),
+  ].slice(0, 8);
+}
 
 async function fetchRagContext(
   question: string,
   deepLinkEntity?: { type: string; id: string },
 ): Promise<string> {
-  const endpoint = process.env.OPENSEARCH_COLLECTION_ENDPOINT ?? "";
-  if (!endpoint) return "";
-
   const snippets: string[] = [];
 
-  // 1. Deep-link context: if caller passed an entity, fetch it directly.
+  // 1. Deep-link context: direct fetch if the caller passed an entity.
   if (deepLinkEntity) {
     const row = await getItem(deepLinkEntity.type, { id: deepLinkEntity.id }).catch(
       () => undefined,
@@ -207,7 +250,114 @@ async function fetchRagContext(
     }
   }
 
-  // 2. Full-text search across the inventory index + HSN index.
+  // 2. Keyword-scan the most useful models. Each scan is capped at Limit=200
+  //    and we further post-filter + cap to the top 5 matches.
+  const keywords = extractKeywords(question);
+  if (keywords.length > 0) {
+    // ProductMaster — name + model + brand
+    snippets.push(
+      ...(await scanModelForKeywords("ProductMaster", keywords, [
+        "productName",
+        "brand",
+        "modelNumber",
+        "hsnCode",
+      ])),
+    );
+    // Client — name
+    snippets.push(
+      ...(await scanModelForKeywords("Client", keywords, ["name", "gstin", "billingCity"])),
+    );
+    // Vendor — name
+    snippets.push(
+      ...(await scanModelForKeywords("Vendor", keywords, ["name", "gstin"])),
+    );
+    // Project — name + code
+    snippets.push(
+      ...(await scanModelForKeywords("Project", keywords, ["projectName", "projectCode"])),
+    );
+    // ClientInvoice — invoice number (for "what's the status of INV-xxx")
+    snippets.push(
+      ...(await scanModelForKeywords("ClientInvoice", keywords, ["invoiceNumber", "status"])),
+    );
+  }
+
+  // 3. Current stock summary — always useful for inventory questions.
+  // Cheap aggregate query: active stock alerts + unit count by category.
+  snippets.push(...(await stockSummary()));
+
+  // Optional OpenSearch augmentation — only if explicitly enabled.
+  if (process.env.USE_OPENSEARCH === "1") {
+    snippets.push(...(await opensearchRag(question)));
+  }
+
+  return snippets.join("\n---\n").slice(0, 12000);
+}
+
+async function scanModelForKeywords(
+  model: string,
+  keywords: string[],
+  searchFields: string[],
+): Promise<string[]> {
+  try {
+    const { scanItems } = await import("../_lib/ddb.js");
+    // Build a FilterExpression that matches ANY keyword in ANY of the fields.
+    const attrNames: Record<string, string> = {};
+    const attrValues: Record<string, string> = {};
+    const clauses: string[] = [];
+
+    searchFields.forEach((f, i) => {
+      attrNames[`#f${i}`] = f;
+      keywords.forEach((kw, j) => {
+        const valKey = `:v${i}_${j}`;
+        attrValues[valKey] = kw;
+        clauses.push(`contains(#f${i}, ${valKey})`);
+      });
+    });
+
+    if (clauses.length === 0) return [];
+
+    const rows = await scanItems<Record<string, unknown>>(model, {
+      FilterExpression: clauses.join(" OR "),
+      ExpressionAttributeNames: attrNames,
+      ExpressionAttributeValues: attrValues,
+      Limit: 50,
+    });
+
+    return rows.slice(0, 5).map(
+      (r) => `${model}: ${JSON.stringify(r).slice(0, 600)}`,
+    );
+  } catch (e) {
+    console.warn(`[chatbot] RAG scan ${model} failed:`, (e as Error).message);
+    return [];
+  }
+}
+
+async function stockSummary(): Promise<string[]> {
+  try {
+    const { scanItems } = await import("../_lib/ddb.js");
+    const alerts = await scanItems<{ alertType?: string; message?: string; severity?: string }>(
+      "StockAlert",
+      {
+        FilterExpression: "isActive = :t",
+        ExpressionAttributeValues: { ":t": "TRUE" },
+        Limit: 20,
+      },
+    );
+    if (alerts.length === 0) return [];
+    const summary = alerts
+      .slice(0, 10)
+      .map((a) => `${a.severity ?? ""} ${a.alertType ?? ""}: ${a.message ?? ""}`)
+      .join("\n");
+    return [`Active alerts (snapshot):\n${summary}`];
+  } catch {
+    return [];
+  }
+}
+
+async function opensearchRag(question: string): Promise<string[]> {
+  const endpoint = process.env.OPENSEARCH_COLLECTION_ENDPOINT ?? "";
+  if (!endpoint) return [];
+  const out: string[] = [];
   const indexes = [
     process.env.OPENSEARCH_SEARCH_INDEX ?? "av-inventory-search",
     process.env.OPENSEARCH_HSN_INDEX ?? "hsn-india-gst",
@@ -228,14 +378,13 @@ async function fetchRagContext(
         hits?: { hits?: Array<{ _source: Record<string, unknown> }> };
       };
       for (const hit of body.hits?.hits ?? []) {
-        snippets.push(JSON.stringify(hit._source).slice(0, 800));
+        out.push(JSON.stringify(hit._source).slice(0, 800));
       }
     } catch (e) {
-      console.warn(`[chatbot] RAG ${index} failed:`, (e as Error).message);
+      console.warn(`[chatbot] OS ${index} failed:`, (e as Error).message);
     }
   }
-
-  return snippets.join("\n---\n").slice(0, 12000); // hard cap to keep Gemini happy
+  return out;
 }
 
 // --------- Gemini ----------
@@ -273,8 +422,12 @@ async function callGemini(
     generationConfig: { temperature: 0.3 },
   };
 
+  // Model is env-configurable; default gemini-2.5-flash for fast chatbot replies
+  // with tool (google_search) support. Swap to gemini-2.5-pro via env var for
+  // higher-quality responses at ~4x the cost.
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
   const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

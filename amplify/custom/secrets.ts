@@ -18,14 +18,12 @@ import type { MinimalBackend } from "./_backend-types.js";
 import { asFn } from "./_backend-types.js";
 
 const GEMINI_SECRET_ID = process.env.SECRET_ID_GEMINI ?? "av-inventory/gemini-api-key";
-const EXCHANGE_SECRET_ID =
-  process.env.SECRET_ID_EXCHANGE_RATE ?? "av-inventory/exchangerate-api-key";
+const EXCHANGE_SECRET_ID = process.env.SECRET_ID_EXCHANGE_RATE; // optional
 
 export function createSecretReferences(backend: MinimalBackend): void {
   const stack = Stack.of(backend.data.stack);
 
   const gemini = Secret.fromSecretNameV2(stack, "GeminiApiKey", GEMINI_SECRET_ID);
-  const exchange = Secret.fromSecretNameV2(stack, "ExchangeRateApiKey", EXCHANGE_SECRET_ID);
 
   const chatbot = asFn(backend, "chatbotHandler").resources.lambda;
   const hsn = asFn(backend, "hsnValidator").resources.lambda;
@@ -33,11 +31,17 @@ export function createSecretReferences(backend: MinimalBackend): void {
 
   grantRead(chatbot, gemini.secretArn);
   grantRead(hsn, gemini.secretArn);
-  grantRead(forex, exchange.secretArn);
-
   addEnv(chatbot, "GEMINI_SECRET_ID", GEMINI_SECRET_ID);
   addEnv(hsn, "GEMINI_SECRET_ID", GEMINI_SECRET_ID);
-  addEnv(forex, "EXCHANGE_RATE_SECRET_ID", EXCHANGE_SECRET_ID);
+
+  // ExchangeRate-API is optional. By default the forex Lambda uses the
+  // keyless open.er-api.com free tier. Set SECRET_ID_EXCHANGE_RATE to
+  // switch to the paid authenticated endpoint.
+  if (EXCHANGE_SECRET_ID) {
+    const exchange = Secret.fromSecretNameV2(stack, "ExchangeRateApiKey", EXCHANGE_SECRET_ID);
+    grantRead(forex, exchange.secretArn);
+    addEnv(forex, "EXCHANGE_RATE_SECRET_ID", EXCHANGE_SECRET_ID);
+  }
 }
 
 function grantRead(fn: { addToRolePolicy?: (s: PolicyStatement) => void }, secretArn: string): void {

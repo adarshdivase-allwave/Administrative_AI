@@ -1,5 +1,5 @@
 /**
- * boq-parser — Bill Of Quantity spreadsheet → normalized PO-ready line items.
+ * boq-parser â€” Bill Of Quantity spreadsheet â†’ normalized PO-ready line items.
  *
  * Input (AppSync resolver):
  *   {
@@ -26,9 +26,9 @@
  *
  * Matching algorithm:
  *   - Fuzzy match description against ProductMaster.productName using
- *     Levenshtein distance ratio (≥ 0.75 confidence = auto-match).
+ *     Levenshtein distance ratio (â‰¥ 0.75 confidence = auto-match).
  *   - If HSN column present, each line is validated via shared/hsn.ts.
- *     Invalid HSNs are flagged but do not block the parse — the downstream
+ *     Invalid HSNs are flagged but do not block the parse â€” the downstream
  *     PO creation UI lets Purchase fix them.
  */
 import * as XLSX from "xlsx";
@@ -74,7 +74,9 @@ export interface Output {
 
 const MATCH_THRESHOLD = 0.75;
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<Output> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.s3Bucket || !event.s3Key) {
     throw new Error("s3Bucket and s3Key are required");
   }
@@ -88,7 +90,7 @@ export const handler = async (event: Input): Promise<Output> => {
   const mapping = event.columnMapping ?? autoDetectColumns(rows[0]!);
   if (!mapping) {
     throw new Error(
-      "Could not auto-detect column mapping — please provide columnMapping explicitly.",
+      "Could not auto-detect column mapping â€” please provide columnMapping explicitly.",
     );
   }
 
@@ -103,7 +105,7 @@ export const handler = async (event: Input): Promise<Output> => {
   let hsnWarnings = 0;
 
   // sheet_to_json returns one object per data row (headers become keys),
-  // so we iterate from 0 — not 1. The `autoDetectColumns` call above used
+  // so we iterate from 0 â€” not 1. The `autoDetectColumns` call above used
   // rows[0] only to discover header names, not to consume the row.
   for (let i = 0; i < rows.length; i++) {
     const raw = rows[i]!;
@@ -224,7 +226,7 @@ function autoDetectColumns(
   return { description, quantity, unitRate, hsn };
 }
 
-/** Levenshtein-based similarity ∈ [0, 1]. 1.0 = identical. */
+/** Levenshtein-based similarity âˆˆ [0, 1]. 1.0 = identical. */
 function similarity(a: string, b: string): number {
   const s1 = a.toLowerCase().trim();
   const s2 = b.toLowerCase().trim();

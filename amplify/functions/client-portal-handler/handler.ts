@@ -1,5 +1,5 @@
 /**
- * client-portal-handler — serves a read-only, token-authenticated project view
+ * client-portal-handler â€” serves a read-only, token-authenticated project view
  * to external clients with NO Cognito login.
  *
  * Security model:
@@ -14,7 +14,7 @@
  *   - On success, return ONLY non-sensitive fields (no pricing, no GSTIN,
  *     no notes visible from sidebar comments, no cross-client data).
  *
- * Output shape carefully mirrors spec §21:
+ * Output shape carefully mirrors spec Â§21:
  *   - project name + company
  *   - allocated unit list (serial, product, status)
  *   - dispatch date
@@ -85,7 +85,9 @@ interface UnitRow {
 }
 interface ProductRow { id: string; productName?: string; modelNumber?: string }
 
-export const handler = async (event: Input): Promise<PortalResponse | { error: string }> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<PortalResponse | { error: string }> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.token || !event?.projectId) {
     return { error: "Both token and projectId are required." };
   }
@@ -155,7 +157,7 @@ export const handler = async (event: Input): Promise<PortalResponse | { error: s
   const portalUnits: PortalUnit[] = units.map((u) => {
     const p = u.productId ? products.get(u.productId) : undefined;
     return {
-      serialNumber: u.serialNumber ?? "—",
+      serialNumber: u.serialNumber ?? "â€”",
       productName: p?.productName ?? "Equipment",
       modelNumber: p?.modelNumber,
       status: u.status ?? "ALLOCATED_TO_PROJECT",

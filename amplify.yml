@@ -1,0 +1,54 @@
+# AWS Amplify Hosting — fullstack Gen 2 (backend + Vite React frontend).
+# After you connect this GitHub repo in the Amplify Console, every push to the
+# tracked branch runs: backend (CDK pipeline-deploy) → frontend (npm run build).
+#
+# Console: AWS Amplify → your app → Hosting → Connect branch → GitHub → select
+# repository `adarshdivase-allwave/Administrative_AI` and branch `main`.
+#
+# Per-branch env vars (recommended): Amplify Console → App → Environment variables
+#   APP_ENV=prod   (or staging / dev for non-prod branches)
+#   AWS_REGION is implied by the app region; pipeline-deploy uses the Hosting app id.
+#
+# Prerequisites in the AWS account (one-time): Secrets Manager secret
+#   av-inventory/gemini-api-key  with {"apiKey":"..."}  (see docs/deployment/02-first-deploy.md)
+
+version: 1
+
+# React Router / client-side routes — serve index.html for non-file paths
+customRules:
+  - source: "/<*>"
+    target: "/index.html"
+    status: "404-200"
+
+backend:
+  phases:
+    build:
+      commands:
+        - nvm install 20
+        - nvm use 20
+        - node --version
+        - npm ci --cache .npm --prefer-offline
+        - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+
+frontend:
+  phases:
+    preBuild:
+      commands:
+        - nvm install 20
+        - nvm use 20
+        - cd frontend
+        - npm ci --cache .npm --prefer-offline
+    build:
+      commands:
+        - cd frontend
+        - npm run build
+  artifacts:
+    baseDirectory: frontend/dist
+    files:
+      - "**/*"
+  cache:
+    paths:
+      - .npm/**/*
+      - node_modules/**/*
+      - frontend/.npm/**/*
+      - frontend/node_modules/**/*

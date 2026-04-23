@@ -7,5 +7,5 @@ export const chatbotHandler = defineFunction({
   architecture: "arm64",
   timeoutSeconds: 120,
   memoryMB: 1536,
-  environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
+    environment: { APP_ENV: process.env.APP_ENV ?? "dev" },
 });

@@ -1,31 +1,18 @@
 /**
  * forex-rate-fetcher — live USD/EUR/GBP → INR rates with a 6-hour DynamoDB cache.
  *
- * Input shape (AppSync direct resolver or internal Lambda invoke):
- *   { quoteCurrency: "USD" | "EUR" | "GBP", forceRefresh?: boolean }
+ * Data source: **open.er-api.com** — the keyless public tier of ExchangeRate-API.
+ * Free, no Secrets Manager dependency, no sign-up, rates updated daily.
+ * Good enough for import cost estimation where we only need ±0.5% accuracy.
  *
- * Output:
- *   {
- *     baseCurrency: "INR",
- *     quoteCurrency: "USD" | "EUR" | "GBP",
- *     rate: number,          // 1 <quote> = <rate> INR
- *     fetchedAt: ISO8601,
- *     expiresAt: ISO8601,
- *     cacheHit: boolean,
- *     source: "exchangerate-api" | "cache"
- *   }
+ * Optional upgrade path: if you want the paid ExchangeRate-API with more
+ * frequent updates, set `EXCHANGE_RATE_API_KEY_SECRET_ID` env var pointing
+ * at a Secrets Manager secret with `{"apiKey":"..."}` and the Lambda switches
+ * to the authenticated endpoint automatically.
  *
- * Behavior:
- *   - On cache hit (entry exists AND expiresAt > now AND !forceRefresh): return cached.
- *   - On cache miss / stale / forceRefresh: fetch from ExchangeRate-API,
- *     store a new ForexRateCache row with TTL 6h, return.
- *   - API failures surface as structured errors — caller (frontend) shows
- *     "rate unavailable" with the most recent cached entry as a fallback.
- *
- * Cached by (baseCurrency=INR, quoteCurrency) pair.
+ * Input / output unchanged.
  */
 import { FOREX_CACHE_TTL_HOURS, SUPPORTED_CURRENCIES } from "../../../shared/constants.js";
-import { getSecretField } from "../_lib/secrets.js";
 import { putItem, queryItems } from "../_lib/ddb.js";
 
 type Quote = "USD" | "EUR" | "GBP";
@@ -42,7 +29,7 @@ export interface Output {
   fetchedAt: string;
   expiresAt: string;
   cacheHit: boolean;
-  source: "exchangerate-api" | "cache";
+  source: "open.er-api.com" | "exchangerate-api" | "cache";
 }
 
 interface CachedRow {
@@ -56,9 +43,16 @@ interface CachedRow {
 }
 
 const CACHE_MS = FOREX_CACHE_TTL_HOURS * 60 * 60 * 1000;
-const EXCHANGE_API_BASE = "https://v6.exchangerate-api.com/v6";
+// Kept for reference / potential paid-upgrade path. Not used by default.
+// const EXCHANGE_API_BASE = "https://v6.exchangerate-api.com/v6";
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (
+  rawEvent: Input | { arguments?: Input },
+): Promise<Output> => {
+  // Support both CLI and AppSync resolver shapes.
+  const event: Input =
+    (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
+
   if (!event?.quoteCurrency) {
     throw new Error("quoteCurrency is required");
   }
@@ -89,12 +83,9 @@ export const handler = async (event: Input): Promise<Output> => {
     }
   }
 
-  // 2. Live fetch from ExchangeRate-API.
-  const apiKey = await getSecretField(
-    process.env.EXCHANGE_RATE_SECRET_ID ?? "av-inventory/exchangerate-api-key",
-    "apiKey",
-  );
-  const rate = await fetchLiveRate(apiKey, event.quoteCurrency);
+  // 2. Live fetch. By default use the free keyless tier at open.er-api.com.
+  //    If EXCHANGE_RATE_API_KEY_SECRET_ID is set, use the paid endpoint.
+  const rate = await fetchLiveRate(event.quoteCurrency);
 
   // 3. Store new cache row.
   const fetchedAt = new Date(now).toISOString();
@@ -106,7 +97,7 @@ export const handler = async (event: Input): Promise<Output> => {
     rate,
     fetchedAt,
     expiresAt,
-    source: "exchangerate-api",
+    source: "open.er-api.com",
     createdAt: fetchedAt,
     updatedAt: fetchedAt,
   });
@@ -118,7 +109,7 @@ export const handler = async (event: Input): Promise<Output> => {
     fetchedAt,
     expiresAt,
     cacheHit: false,
-    source: "exchangerate-api",
+    source: "open.er-api.com",
   };
 };
 
@@ -149,31 +140,31 @@ async function readCache(quote: Quote): Promise<CachedRow | null> {
   return items[0] ?? null;
 }
 
-async function fetchLiveRate(apiKey: string, quote: Quote): Promise<number> {
-  // ExchangeRate-API v6: /v6/{KEY}/pair/{FROM}/{TO}
-  // The "from" is the foreign currency and "to" is INR, so that a rate of X
-  // means 1 FOREIGN = X INR (which matches how we store it).
-  const url = `${EXCHANGE_API_BASE}/${apiKey}/pair/${quote}/INR`;
+async function fetchLiveRate(quote: Quote): Promise<number> {
+  // open.er-api.com: `https://open.er-api.com/v6/latest/{BASE}`
+  // Returns an object: `{ result: "success", rates: { INR: 83.42, ... }, ... }`
+  // No API key required. Rate limit is generous for our traffic.
+  const url = `https://open.er-api.com/v6/latest/${quote}`;
   const res = await fetch(url, { method: "GET" });
   if (!res.ok) {
-    throw new Error(`ExchangeRate-API returned ${res.status}: ${await res.text()}`);
+    throw new Error(`open.er-api.com returned ${res.status}: ${await res.text()}`);
   }
   const body = (await res.json()) as {
     result?: string;
-    conversion_rate?: number;
+    rates?: Record<string, number>;
     "error-type"?: string;
   };
-  if (body.result !== "success" || typeof body.conversion_rate !== "number") {
+  if (body.result !== "success" || !body.rates || typeof body.rates.INR !== "number") {
     throw new Error(
-      `ExchangeRate-API error: ${body["error-type"] ?? "unknown"} (result=${body.result})`,
+      `open.er-api.com error: ${body["error-type"] ?? "unknown"} (result=${body.result})`,
     );
   }
-  // Clamp to a sane range — if API gives us something absurd, abort rather
-  // than contaminate GRNs with bad cost calculations.
-  if (body.conversion_rate < 10 || body.conversion_rate > 300) {
+  const rate = body.rates.INR;
+  // Clamp to a sane range — if API gives us something absurd, abort.
+  if (rate < 10 || rate > 300) {
     throw new Error(
-      `ExchangeRate-API returned implausible rate ${body.conversion_rate} for ${quote}/INR — refusing to cache.`,
+      `Forex API returned implausible rate ${rate} for ${quote}/INR — refusing to cache.`,
     );
   }
-  return body.conversion_rate;
+  return rate;
 }

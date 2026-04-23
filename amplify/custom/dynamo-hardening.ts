@@ -1,21 +1,24 @@
 /**
- * DynamoDB table hardening — applied post-synthesis to every generated
- * CfnTable in the data stack. Guarantees the three spec-mandated properties
- * on EVERY table, not just the ones the author remembered to configure.
+ * DynamoDB table hardening — applied post-synthesis to every Amplify-created
+ * table. Guarantees spec-mandated properties on EVERY table, not just the ones
+ * the author remembered to configure.
  *
  *   1. PointInTimeRecoveryEnabled: true  (ALL envs)
  *   2. SSESpecification.SSEEnabled: true (ALL envs) — AWS-managed KMS key
  *   3. DeletionProtectionEnabled: true   (prod only — dev/staging off so
  *                                         `ampx sandbox delete` works)
- *   4. BillingMode: PAY_PER_REQUEST      (left as-is; Amplify default)
  *
- * Also applies a TTL attribute to auto-prune stale rows:
- *   - ForexRateCache  (TTL on `expiresAt`)
- *   - ClientPortalToken  (TTL on `expiresAt`, default 30-day per token)
- *   - ChatSession  (TTL on `ttl`, 90-day rolling)
+ * Plus TTL on rows that should expire:
+ *   - ForexRateCache    (`expiresAt`)
+ *   - ClientPortalToken (`expiresAt`)
+ *   - ChatSession       (`ttl`)
+ *
+ * Amplify Gen 2 does NOT expose the underlying `CfnTable` via
+ * `backend.data.resources.cfnResources.amplifyDynamoDbTables` in recent
+ * versions. Instead, the L2 ITable is at `backend.data.resources.tables`.
+ * We unwrap to the CfnTable via `node.defaultChild`.
  */
-import { CfnTable } from "aws-cdk-lib/aws-dynamodb";
-import { IConstruct } from "constructs";
+import type { CfnTable, ITable, Table } from "aws-cdk-lib/aws-dynamodb";
 import type { MinimalBackend } from "./_backend-types.js";
 
 const TTL_MODELS: Record<string, string> = {
@@ -28,40 +31,38 @@ export function applyDynamoHardening(backend: MinimalBackend): void {
   const appEnv = (process.env.APP_ENV ?? "dev").toLowerCase();
   const isProd = appEnv === "prod";
 
-  // Amplify Gen 2's data resource exposes the CfnResources under .resources.
   const resources = backend.data.resources as
-    | { amplifyDynamoDbTables?: Record<string, CfnTable>; cfnResources?: unknown }
+    | { tables?: Record<string, ITable> }
     | undefined;
-
-  // Preferred path: walk the typed table dictionary.
-  const tables = resources?.amplifyDynamoDbTables;
-  if (tables) {
-    for (const [modelName, table] of Object.entries(tables)) {
-      hardenTable(table, isProd);
-      const ttlAttr = TTL_MODELS[modelName];
-      if (ttlAttr) {
-        table.timeToLiveSpecification = {
-          attributeName: ttlAttr,
-          enabled: true,
-        } as CfnTable.TimeToLiveSpecificationProperty;
-      }
-    }
+  const tables = resources?.tables;
+  if (!tables || Object.keys(tables).length === 0) {
+    console.warn("[dynamo-hardening] No tables found on backend.data.resources.");
     return;
   }
 
-  // Fallback: walk the construct tree and harden any CfnTable we find.
-  backend.data.stack.node
-    .findAll()
-    .filter((c: IConstruct): c is CfnTable => c instanceof CfnTable)
-    .forEach((t) => hardenTable(t, isProd));
-}
+  let hardened = 0;
+  for (const [modelName, iTable] of Object.entries(tables)) {
+    // L2 Table wraps L1 CfnTable at .node.defaultChild
+    const tableAsL2 = iTable as Table;
+    const cfnTable = tableAsL2.node.defaultChild as CfnTable | undefined;
+    if (!cfnTable) continue;
 
-function hardenTable(table: CfnTable, isProd: boolean): void {
-  table.pointInTimeRecoverySpecification = {
-    pointInTimeRecoveryEnabled: true,
-  };
-  table.sseSpecification = {
-    sseEnabled: true,
-  };
-  table.deletionProtectionEnabled = isProd;
+    cfnTable.pointInTimeRecoverySpecification = {
+      pointInTimeRecoveryEnabled: true,
+    };
+    cfnTable.sseSpecification = { sseEnabled: true };
+    cfnTable.deletionProtectionEnabled = isProd;
+
+    const ttlAttr = TTL_MODELS[modelName];
+    if (ttlAttr) {
+      cfnTable.timeToLiveSpecification = {
+        attributeName: ttlAttr,
+        enabled: true,
+      } as CfnTable.TimeToLiveSpecificationProperty;
+    }
+    hardened++;
+  }
+  console.log(
+    `[dynamo-hardening] Hardened ${hardened}/${Object.keys(tables).length} tables (PITR+SSE, deletionProtection=${isProd}).`,
+  );
 }

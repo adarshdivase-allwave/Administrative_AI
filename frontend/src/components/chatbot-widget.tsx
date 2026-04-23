@@ -144,7 +144,7 @@ export function ChatbotWidget() {
             <Bot className="h-4 w-4" />
             <span className="text-sm font-semibold">Inventory assistant</span>
             <Badge variant="outline" className="text-[10px]">
-              Gemini 1.5 Pro
+              Gemini 2.5
             </Badge>
           </div>
           <Button variant="ghost" size="icon" onClick={toggle} aria-label="Close assistant">

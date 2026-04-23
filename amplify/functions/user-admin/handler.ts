@@ -1,5 +1,5 @@
 /**
- * user-admin — Cognito user-pool administration via AppSync.
+ * user-admin â€” Cognito user-pool administration via AppSync.
  *
  * Operations (Admin-group only at the AppSync layer):
  *   - LIST:   list up to 60 users with email + enabled + group memberships
@@ -84,7 +84,9 @@ function userPoolId(): string {
   return id;
 }
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<Output> => {
+  // Support both CLI-invoke and AppSync resolver shapes.
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
   if (!event?.op) throw new Error("op is required");
   const UserPoolId = userPoolId();
 
@@ -106,7 +108,7 @@ export const handler = async (event: Input): Promise<Output> => {
           ].filter(Boolean) as Array<{ Name: string; Value: string }>,
           DesiredDeliveryMediums: [DeliveryMediumType.EMAIL],
           MessageAction: MessageActionType.SUPPRESS,
-          // Temporary password — Cognito will force change on first login.
+          // Temporary password â€” Cognito will force change on first login.
           TemporaryPassword: generateTempPassword(),
         }),
       );
@@ -189,7 +191,7 @@ async function listUsers(UserPoolId: string, limit: number): Promise<UserRow[]> 
     const emailAttr = (u.Attributes ?? []).find((a) => a.Name === "email");
     const email = emailAttr?.Value ?? "";
 
-    // Resolve group memberships — one extra call per user, but total users per
+    // Resolve group memberships â€” one extra call per user, but total users per
     // pool is typically small (< 100 employees). For larger tenants add a
     // DynamoDB-backed cache.
     let groups: string[] = [];

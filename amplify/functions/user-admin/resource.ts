@@ -7,7 +7,7 @@ export const userAdmin = defineFunction({
   architecture: "arm64",
   timeoutSeconds: 30,
   memoryMB: 512,
-  environment: {
+    environment: {
     APP_ENV: process.env.APP_ENV ?? "dev",
   },
 });

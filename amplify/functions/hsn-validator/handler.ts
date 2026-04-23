@@ -4,32 +4,22 @@
  *
  * Pipeline:
  *   1. Format check via shared/hsn.ts (4/6/8-digit HSN, 6-digit 99-prefix SAC)
- *   2. OpenSearch lookup in `hsn-india-gst` index
- *   3. If miss: Gemini 1.5 Pro with Google Search grounding → returns suggested code
+ *   2. DynamoDB lookup in the HSNDatabase table (seeded by scripts/seed-hsn.ts)
+ *   3. OpenSearch lookup (ONLY if USE_OPENSEARCH=1 + endpoint configured —
+ *      retained for orgs that want premium fuzzy search; off by default)
+ *   4. If miss: Gemini (default gemini-2.5-flash, env-configurable via
+ *      GEMINI_MODEL) with Google Search grounding → returns suggested code
  *
- * Input (AppSync resolver):
- *   { hsnCode?: string, productName?: string, productSpecs?: string }
- * At least one of hsnCode OR productName must be provided.
+ * Input / output as before.
  *
- * Output:
- *   {
- *     status: "VALID" | "INVALID" | "AI_SUGGESTED",
- *     hsnCode: string,
- *     description: string,
- *     gstRatePercent: number,
- *     tallyFormat: string,
- *     tallyCompatible: boolean,
- *     isSac: boolean,
- *     sourceUrl?: string,        // only when AI_SUGGESTED
- *     sourceDomain?: string,     // ditto
- *     error?: string
- *   }
- *
- * Note: OpenSearch client + Gemini SDK are imported dynamically to keep
- * cold-start small for callers that hit cache-only paths.
+ * Why DynamoDB-first: the HSNDatabase table holds all ~12k India GST codes
+ * seeded by `seed-hsn.ts`. A keyed GetItem returns in ~10-20ms with no
+ * extra infra. OpenSearch Serverless is expensive (~$180/mo idle) and was
+ * only marginally faster; not worth it for this dataset scale.
  */
 import { validateHsn, normalizeHsnForTally } from "../../../shared/hsn.js";
 import { getSecretField } from "../_lib/secrets.js";
+import { getItem } from "../_lib/ddb.js";
 
 interface Input {
   hsnCode?: string;
@@ -50,13 +40,16 @@ export interface Output {
   error?: string;
 }
 
-// Env vars are read lazily inside each call so that tests (which set them
-// in `beforeEach`) see the latest values even though the module was loaded
-// at the top of the test file.
-const getOpenSearchEndpoint = () => process.env.OPENSEARCH_COLLECTION_ENDPOINT ?? "";
+// Env vars read lazily so tests can override them in `beforeEach`.
+const getOpenSearchEndpoint = () =>
+  process.env.USE_OPENSEARCH === "1" ? (process.env.OPENSEARCH_COLLECTION_ENDPOINT ?? "") : "";
 const getHsnIndex = () => process.env.OPENSEARCH_HSN_INDEX ?? "hsn-india-gst";
 
-export const handler = async (event: Input): Promise<Output> => {
+export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<Output> => {
+  // Support both CLI-invoke (`{hsnCode: ...}`) and AppSync resolver shape
+  // (`{arguments: {hsnCode: ...}, identity, ...}`).
+  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
+
   if (!event?.hsnCode && !event?.productName) {
     throw new Error("Either hsnCode or productName is required");
   }
@@ -77,6 +70,21 @@ export const handler = async (event: Input): Promise<Output> => {
       };
     }
 
+    // 1. DynamoDB lookup first (always available, free tier, ~10-20ms).
+    const ddbRow = await lookupInDynamo(formatCheck.tallyFormat);
+    if (ddbRow) {
+      return {
+        status: "VALID",
+        hsnCode: formatCheck.tallyFormat,
+        description: ddbRow.description,
+        gstRatePercent: ddbRow.gstRatePercent,
+        tallyFormat: formatCheck.tallyFormat,
+        tallyCompatible: true,
+        isSac: formatCheck.isSac,
+      };
+    }
+
+    // 2. Optional OpenSearch (only if explicitly enabled via USE_OPENSEARCH=1).
     const row = await lookupInOpenSearch(formatCheck.tallyFormat);
     if (row) {
       return {
@@ -131,6 +139,22 @@ interface HsnRow {
   gstRatePercent: number;
 }
 
+/** Primary lookup path: DynamoDB HSNDatabase table, keyed on hsnCode. */
+async function lookupInDynamo(hsnCode: string): Promise<HsnRow | null> {
+  try {
+    const row = await getItem<HsnRow & { id?: string }>("HSNDatabase", { id: hsnCode });
+    if (!row || !row.hsnCode) return null;
+    return {
+      hsnCode: row.hsnCode,
+      description: row.description ?? "",
+      gstRatePercent: Number(row.gstRatePercent ?? 0),
+    };
+  } catch (e) {
+    console.warn("[hsn-validator] DynamoDB lookup failed:", (e as Error).message);
+    return null;
+  }
+}
+
 async function lookupInOpenSearch(hsnCode: string): Promise<HsnRow | null> {
   const endpoint = getOpenSearchEndpoint();
   if (!endpoint) return null;
@@ -172,16 +196,22 @@ async function askGemini(
     );
 
     const prompt = buildGeminiPrompt(productName, productSpecs);
+    // Gemini 2.x does NOT allow combining `tools: [{google_search: {}}]` with
+    // `responseMimeType: "application/json"` — the API errors with
+    // "Tool use with a response mime type: 'application/json' is unsupported".
+    // We keep google_search (for CBIC grounding) and parse JSON from plain text.
     const body = {
       contents: [{ role: "user", parts: [{ text: prompt }] }],
       tools: [{ google_search: {} }],
       generationConfig: {
-        responseMimeType: "application/json",
         temperature: 0.1,
       },
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+    // Model is env-configurable — default gemini-2.5-flash (fast + cheap + tool-capable).
+    // Bump to gemini-2.5-pro or gemini-pro-latest for higher-quality AI suggestions.
+    const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -201,12 +231,13 @@ async function askGemini(
     };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!text) return null;
-    const parsed = JSON.parse(text) as {
+    const parsed = extractJson(text) as {
       hsnCode?: string;
       description?: string;
       gstRate?: number;
       source_url?: string;
-    };
+    } | null;
+    if (!parsed) return null;
     if (!parsed.hsnCode) return null;
     const tally = normalizeHsnForTally(parsed.hsnCode);
     const fmt = validateHsn(tally);
@@ -250,4 +281,52 @@ function safeDomain(url: string): string {
   } catch {
     return "";
   }
+}
+
+/**
+ * Extract a JSON object from Gemini's text reply. Handles:
+ *   - Pure JSON: `{"hsnCode":"..."}`
+ *   - Markdown-fenced: ` ```json\n{...}\n``` ` or ` ```\n{...}\n``` `
+ *   - JSON embedded in prose (picks the first balanced { ... } object)
+ * Returns `null` if no valid JSON object is found.
+ */
+function extractJson(text: string): unknown {
+  const trimmed = text.trim();
+  // Fast path: whole text is JSON.
+  if (trimmed.startsWith("{")) {
+    try {
+      return JSON.parse(trimmed);
+    } catch {
+      /* fall through */
+    }
+  }
+  // Markdown fence: ```json ... ```
+  const fenceMatch = /```(?:json)?\s*([\s\S]*?)\s*```/i.exec(trimmed);
+  if (fenceMatch?.[1]) {
+    try {
+      return JSON.parse(fenceMatch[1]);
+    } catch {
+      /* fall through */
+    }
+  }
+  // Balanced-brace scan: grab the first { ... } that parses.
+  const start = trimmed.indexOf("{");
+  if (start >= 0) {
+    let depth = 0;
+    for (let i = start; i < trimmed.length; i++) {
+      const ch = trimmed[i];
+      if (ch === "{") depth++;
+      else if (ch === "}") {
+        depth--;
+        if (depth === 0) {
+          try {
+            return JSON.parse(trimmed.slice(start, i + 1));
+          } catch {
+            break;
+          }
+        }
+      }
+    }
+  }
+  return null;
 }
