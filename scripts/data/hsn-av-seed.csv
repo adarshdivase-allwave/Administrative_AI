@@ -1,0 +1,34 @@
+hsnCode,description,gstRatePercent,chapter,section,isSac
+85287200,"Reception apparatus for TV, colour (monitors, signage displays)",18,85,"Section XVI — Electrical machinery",false
+85285900,"Other monitors and projectors",18,85,"Section XVI",false
+85287300,"Reception apparatus for TV, black and white",18,85,"Section XVI",false
+85291030,"Outdoor TV / radio / broadcasting antennas",18,85,"Section XVI",false
+85365020,"Microphones and their stands",18,85,"Section XVI",false
+85183000,"Headphones, earphones and combined microphone/speaker sets",18,85,"Section XVI",false
+85182100,"Single loudspeakers, mounted in their enclosures",18,85,"Section XVI",false
+85182200,"Multiple loudspeakers, mounted in the same enclosure",18,85,"Section XVI",false
+85184000,"Audio-frequency electric amplifiers",18,85,"Section XVI",false
+85444299,"Other electric conductors fitted with connectors (HDMI / DisplayPort cables)",18,85,"Section XVI",false
+85446090,"Other electric conductors for >1000V (AV power cables)",18,85,"Section XVI",false
+85447090,"Optical fibre cables with connectors",18,85,"Section XVI",false
+85444229,"Electric conductors for <=80V with connectors (USB / Lightning etc.)",18,85,"Section XVI",false
+85176200,"Machines for reception, conversion and transmission (switches, routers)",18,85,"Section XVI",false
+85176990,"Other apparatus for data transmission in a wired network",18,85,"Section XVI",false
+85258090,"Video camera recorders, other",18,85,"Section XVI",false
+85258020,"Digital cameras",18,85,"Section XVI",false
+85287100,"Reception apparatus not designed for TV (set-top boxes)",18,85,"Section XVI",false
+85354090,"Lightning arresters, voltage limiters, surge suppressors",18,85,"Section XVI",false
+85437099,"Other electrical apparatus (control systems, scalers, switchers)",18,85,"Section XVI",false
+85177990,"Other parts for telephony / networking apparatus",18,85,"Section XVI",false
+90069910,"Camera tripods and stands",18,90,"Section XVIII",false
+83024110,"Mounting brackets, TV wall mounts (iron / steel)",18,83,"Section XV",false
+94038900,"Furniture for AV racks / equipment cabinets",18,94,"Section XX",false
+998314,"Information technology (IT) consulting services",18,SAC,Services,true
+998315,"Hosting and IT infrastructure provisioning services",18,SAC,Services,true
+998316,"IT infrastructure and network management services",18,SAC,Services,true
+998319,"Other information technology services nowhere else classified",18,SAC,Services,true
+996311,"Commissioning services of electrical installations",18,SAC,Services,true
+996335,"Installation services of other goods (AV installation)",18,SAC,Services,true
+998711,"Maintenance and repair services of fabricated metal products",18,SAC,Services,true
+998713,"Maintenance and repair services of electrical household appliances",18,SAC,Services,true
+998732,"Repair services for consumer electronics (video / audio)",18,SAC,Services,true

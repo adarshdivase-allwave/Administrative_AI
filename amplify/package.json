@@ -1,0 +1,6 @@
+{
+  "name": "av-inventory-amplify-backend",
+  "version": "5.0.0",
+  "type": "module",
+  "private": true
+}

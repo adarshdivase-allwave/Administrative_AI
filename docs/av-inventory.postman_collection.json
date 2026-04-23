@@ -1,0 +1,150 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "AV Inventory Platform — Lambda APIs",
+    "description": "Invoke every on-demand Lambda via AppSync GraphQL or direct AWS Lambda invoke. Set `appsyncUrl`, `apiKey` or `idToken`, and AWS creds as collection variables before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "appsyncUrl", "value": "https://xxxxxxxxxxxxxxxxxxxxxxxxxx.appsync-api.ap-south-1.amazonaws.com/graphql" },
+    { "key": "idToken", "value": "<paste Cognito ID token>" },
+    { "key": "apiKey", "value": "<AppSync API key for public/portal operations>" }
+  ],
+  "item": [
+    {
+      "name": "HSN lookup (AppSync)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"query HSN($hsn: String, $product: String) { validateHsn(hsnCode: $hsn, productName: $product) { status hsnCode description gstRatePercent tallyFormat tallyCompatible sourceUrl } }\",\n  \"variables\": {\n    \"hsn\": \"85287200\",\n    \"product\": null\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Forex rate (INR base)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"query Rate($q: String!) { forexRate(quoteCurrency: $q) { rate fetchedAt cacheHit } }\",\n  \"variables\": { \"q\": \"USD\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "Tally export — GRN",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Export($grnId: ID!) { generateTallyExport(kind: GRN, grnId: $grnId) { s3Key presignedUrl exportedAt xmlSize } }\",\n  \"variables\": { \"grnId\": \"<grn-uuid>\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "Tally export — DC (Sales voucher)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Export($dcId: ID!, $type: String!) { generateTallyExport(kind: DC, dcId: $dcId, voucherType: $type) { s3Key presignedUrl } }\",\n  \"variables\": { \"dcId\": \"<dc-uuid>\", \"type\": \"Sales\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "BOQ parse (after uploading to S3)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Parse($bucket: String!, $key: String!, $boqId: ID) { parseBoq(s3Bucket: $bucket, s3Key: $key, boqUploadId: $boqId) { totalLines matched unmatched hsnWarnings lineItems { description quantity matchedProductId matchConfidence warnings } } }\",\n  \"variables\": {\n    \"bucket\": \"<private-bucket>\",\n    \"key\": \"boq-uploads/test-boq.xlsx\",\n    \"boqId\": null\n  }\n}"
+        }
+      }
+    },
+    {
+      "name": "Invoice scheduler — CREATE",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Sched($id: ID!) { scheduleInvoiceReminders(action: CREATE, invoiceId: $id) { scheduled deleted stages } }\",\n  \"variables\": { \"id\": \"<invoice-uuid>\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "Invoice scheduler — CANCEL",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Sched($id: ID!) { scheduleInvoiceReminders(action: CANCEL, invoiceId: $id) { scheduled deleted } }\",\n  \"variables\": { \"id\": \"<invoice-uuid>\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "Chatbot — ask about inventory",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"mutation Chat($userId: ID!, $msg: String!) { chatbotMessage(userId: $userId, message: $msg) { sessionId reply sourceCitations { url domain } rateLimited } }\",\n  \"variables\": { \"userId\": \"<user-id>\", \"msg\": \"How many LG 55UR640S displays are in General Stock?\" }\n}"
+        }
+      }
+    },
+    {
+      "name": "List active stock alerts (subscription-ready)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" },
+          { "key": "Authorization", "value": "{{idToken}}" }
+        ],
+        "url": { "raw": "{{appsyncUrl}}", "host": ["{{appsyncUrl}}"] },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"query\": \"query Alerts { listStockAlertsByIsActive(isActive: \\\"TRUE\\\", sortDirection: DESC, limit: 50) { items { id alertType severity message generatedAt productId unitId } } }\"\n}"
+        }
+      }
+    }
+  ]
+}

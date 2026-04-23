@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="color-scheme" content="light dark" />
+<title>{{companyName}}</title>
+</head>
+<body style="margin:0; padding:0; background-color:#f4f4f5; font-family: -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color:#111827;">
+
+<div style="display:none; max-height:0; overflow:hidden; font-size:1px; line-height:1px; color:#f4f4f5;">AMC expiring: {{contractNumber}}</div>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f4f4f5;">
+  <tr>
+    <td align="center" style="padding:24px 12px;">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width:600px; background:#ffffff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+
+        <!-- Header -->
+        <tr>
+          <td style="padding:20px 32px; border-bottom:1px solid #e5e7eb;">
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+              <tr>
+                <td align="left">
+                  <a href="{{logoUrl}}" style="text-decoration:none; color:#334155;">
+                    <span style="font-size:18px; font-weight:700; color:#334155;">{{companyName}}</span>
+                  </a>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+
+        <!-- Body -->
+        <tr>
+          <td style="padding:28px 32px; font-size:15px; line-height:1.55; color:#111827;">
+            
+<h2 style="margin:0 0 12px 0; font-size:20px;">AMC contract expiring soon</h2>
+<p>{{count}} AMC contract(s) are expiring in the next 45 days. Please review renewal decisions in the Inventory platform.</p>
+            
+          </td>
+        </tr>
+
+        <!-- Footer -->
+        <tr>
+          <td style="padding:20px 32px; border-top:1px solid #e5e7eb; font-size:12px; line-height:1.5; color:#6b7280;">
+            <div>&copy; {{companyName}} &middot; This is an automated message from our inventory platform.</div>
+            <div style="margin-top:6px;">
+              Questions? Reply to this email or write to <a href="mailto:{{replyEmail}}" style="color:#374151;">{{replyEmail}}</a>.
+            </div>
+            <div style="margin-top:10px;">
+              <a href="{{unsubscribeUrl}}" style="color:#9ca3af; text-decoration:underline;">Unsubscribe from non-critical notifications</a>
+            </div>
+          </td>
+        </tr>
+
+      </table>
+    </td>
+  </tr>
+</table>
+
+</body>
+</html>
