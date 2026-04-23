@@ -1,8 +1,10 @@
 /**
- * Runs before other `amplify/**/resource` modules during CDK synthesis.
- * When `APP_ENV` is unset, derives it from `AWS_BRANCH` (Amplify Hosting /
- * `ampx pipeline-deploy`) so hosted `main` uses `prod` and does not collide
- * with local sandbox resources that default to `dev`.
+ * Runs before other amplify resource modules during CDK synthesis.
+ * When APP_ENV is unset, derives it from AWS_BRANCH (Amplify Hosting /
+ * ampx pipeline-deploy) so hosted main uses prod and does not collide
+ * with local sandbox resources that default to dev.
+ *
+ * Note: Do not write asterisk-slash inside block comments; it ends the comment.
  */
 function sanitizeBranchSegment(branch: string): string {
   const s = branch
