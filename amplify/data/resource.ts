@@ -22,6 +22,7 @@
  *     and in Lambdas via shared/fy.ts.
  *   - Every model has createdAt / updatedAt automatically from Amplify.
  */
+import "../synth-env.js";
 import { a, defineData, type ClientSchema } from "@aws-amplify/backend";
 import { hsnValidator } from "../functions/hsn-validator/resource.js";
 import { forexRateFetcher } from "../functions/forex-rate-fetcher/resource.js";

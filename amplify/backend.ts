@@ -8,6 +8,7 @@
  * Every DynamoDB table is hardened (PITR + SSE + deletion protection)
  * via the post-synth override in `amplify/custom/dynamo-hardening.ts`.
  */
+import "./synth-env.js";
 import { defineBackend } from "@aws-amplify/backend";
 
 import { auth } from "./auth/resource.js";

@@ -5,9 +5,9 @@
 # Console: AWS Amplify → your app → Hosting → Connect branch → GitHub → select
 # repository `adarshdivase-allwave/Administrative_AI` and branch `main`.
 #
-# Per-branch env vars (recommended): Amplify Console → App → Environment variables
-#   APP_ENV=prod   (or staging / dev for non-prod branches)
-#   AWS_REGION is implied by the app region; pipeline-deploy uses the Hosting app id.
+# Optional override: Amplify Console → Environment variables → APP_ENV
+# If unset, `amplify/synth-env.ts` sets APP_ENV from AWS_BRANCH (main → prod).
+# Frontend: VITE_APP_ENV is set in preBuild from AWS_BRANCH to match.
 #
 # Prerequisites in the AWS account (one-time): Secrets Manager secret
 #   av-inventory/gemini-api-key  with {"apiKey":"..."}  (see docs/deployment/02-first-deploy.md)
@@ -43,12 +43,17 @@ frontend:
   phases:
     preBuild:
       commands:
-        - cd frontend
-        - npm ci --cache .npm --prefer-offline
+        - |
+            cd frontend
+            if [ "$AWS_BRANCH" = "main" ] || [ "$AWS_BRANCH" = "master" ]; then export VITE_APP_ENV=prod; elif [ "$AWS_BRANCH" = "staging" ]; then export VITE_APP_ENV=staging; else export VITE_APP_ENV=dev; fi
+            echo "VITE_APP_ENV=$VITE_APP_ENV (AWS_BRANCH=$AWS_BRANCH)"
+            npm ci --cache .npm --prefer-offline
     build:
       commands:
-        - cd frontend
-        - npm run build
+        - |
+            cd frontend
+            if [ "$AWS_BRANCH" = "main" ] || [ "$AWS_BRANCH" = "master" ]; then export VITE_APP_ENV=prod; elif [ "$AWS_BRANCH" = "staging" ]; then export VITE_APP_ENV=staging; else export VITE_APP_ENV=dev; fi
+            npm run build
   artifacts:
     baseDirectory: frontend/dist
     files:
