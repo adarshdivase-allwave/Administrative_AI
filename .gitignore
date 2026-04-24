@@ -14,6 +14,7 @@ build/
 # Amplify Gen 2
 .amplify/
 amplify_outputs.json
+frontend/amplify_outputs.json
 amplify-gen2-*.json
 
 # Env & secrets — NEVER commit

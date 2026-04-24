@@ -28,6 +28,7 @@ import {
   Plane,
   Tag,
   Calculator,
+  AlarmClock,
   type LucideIcon,
 } from "lucide-react";
 
@@ -46,6 +47,7 @@ export const NAV_ITEMS: NavItem[] = [
   // --- Overview ---
   { label: "Dashboard", to: "/", icon: LayoutDashboard, roles: ["Admin", "Logistics", "Purchase", "Sales"], group: "Overview", shortcut: "g d" },
   { label: "Activity feed", to: "/activity", icon: Bell, roles: ["Admin", "Logistics", "Purchase", "Sales"], group: "Overview" },
+  { label: "My reminders", to: "/reminders", icon: AlarmClock, roles: ["Admin", "Logistics", "Purchase", "Sales"], group: "Overview" },
 
   // --- Inventory ---
   { label: "Inventory", to: "/inventory", icon: Package, roles: ["Admin", "Logistics", "Purchase", "Sales"], group: "Inventory", shortcut: "g i" },

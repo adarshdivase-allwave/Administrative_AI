@@ -221,6 +221,28 @@ describe("reminder-dispatcher", () => {
     expect(sch.commandCalls(CreateScheduleCommand).length).toBe(1);
   });
 
+  it("AppSync arguments { reminderId, op } infer SYNC_SCHEDULES", async () => {
+    const { handler } = await import(
+      "../../amplify/functions/reminder-dispatcher/handler.js"
+    );
+    ddb.on(GetCommand).resolves({
+      Item: {
+        id: "r1",
+        userId: "u1",
+        title: "Call vendor",
+        remindAt: new Date(Date.now() + 3600_000).toISOString(),
+        status: "ACTIVE",
+      },
+    });
+    sch.on(CreateScheduleCommand).resolves({ ScheduleArn: "x" });
+    sch.on(DeleteScheduleCommand).resolves({});
+
+    const out = await handler({
+      arguments: { reminderId: "r1", op: "UPSERT" },
+    } as never);
+    expect(out.action).toBe("scheduled");
+  });
+
   it("FIRE marks a one-shot reminder COMPLETED", async () => {
     const { handler } = await import(
       "../../amplify/functions/reminder-dispatcher/handler.js"

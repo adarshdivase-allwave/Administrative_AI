@@ -24,12 +24,15 @@ if (E2E_MOCK) {
 // exactly what we want — no crash.
 type AmplifyOutputs = Parameters<typeof Amplify.configure>[0];
 
-const outputsModules = import.meta.glob("../../../amplify_outputs.json", {
-  eager: true,
-  import: "default",
-}) as Record<string, AmplifyOutputs>;
+const outputsModules = import.meta.glob(
+  ["../../amplify_outputs.json", "../../../amplify_outputs.json"],
+  { eager: true, import: "default" },
+) as Record<string, AmplifyOutputs>;
 
-const outputs: AmplifyOutputs | null = Object.values(outputsModules)[0] ?? null;
+const outputs: AmplifyOutputs | null =
+  (outputsModules["../../amplify_outputs.json"] as AmplifyOutputs | undefined) ??
+  (outputsModules["../../../amplify_outputs.json"] as AmplifyOutputs | undefined) ??
+  null;
 
 if (outputs) {
   Amplify.configure(outputs);

@@ -39,6 +39,8 @@ backend:
         # Bundled Amplify/CDK deps make `npm ci` reject the lockfile; install respects the committed lockfile + cache.
         - npm install --no-audit --no-fund --cache .npm --prefer-offline
         - npx ampx pipeline-deploy --branch $AWS_BRANCH --app-id $AWS_APP_ID
+        - cp -f amplify_outputs.json frontend/amplify_outputs.json
+        - node -e "const o=require('./amplify_outputs.json'); if(!o.data?.url) throw new Error('missing amplify_outputs data.url'); console.log('Bundling frontend with', o.data.url, o.auth.user_pool_id);"
 
 frontend:
   phases:

@@ -51,19 +51,30 @@ interface UserRow {
   givenName?: string;
 }
 
-export const handler = async (rawEvent: Input | { arguments?: Input }): Promise<{ action: string }> => {
-  // Support both CLI-invoke and AppSync resolver shapes.
-  const event: Input = (rawEvent as { arguments?: Input })?.arguments ?? (rawEvent as Input);
-  if (!event?.reminderId || !event.mode) {
-    throw new Error("reminderId and mode are required");
+export const handler = async (
+  rawEvent: Input | { arguments?: Partial<Input> & { op?: Op } },
+): Promise<{ action: string }> => {
+  // AppSync passes only { reminderId, op }; EventBridge / CLI pass { mode, reminderId }.
+  const args =
+    (rawEvent as { arguments?: Partial<Input> & { op?: Op } }).arguments ??
+    (rawEvent as Partial<Input> & { op?: Op });
+  const reminderId = args.reminderId;
+  if (!reminderId) {
+    throw new Error("reminderId is required");
+  }
+  const mode: Mode =
+    args.mode === "FIRE" || args.mode === "SYNC_SCHEDULES"
+      ? args.mode
+      : args.op !== undefined
+        ? "SYNC_SCHEDULES"
+        : "FIRE";
+
+  if (mode === "SYNC_SCHEDULES") {
+    return syncSchedule(reminderId, args.op ?? "UPSERT");
   }
 
-  if (event.mode === "SYNC_SCHEDULES") {
-    return syncSchedule(event.reminderId, event.op ?? "UPSERT");
-  }
-
-  if (event.mode === "FIRE") {
-    return fireReminder(event.reminderId);
+  if (mode === "FIRE") {
+    return fireReminder(reminderId);
   }
 
   return { action: "noop" };

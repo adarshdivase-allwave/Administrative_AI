@@ -32,6 +32,7 @@ import { TransfersPage } from "@/pages/TransfersPage";
 import { LabelPrinterPage } from "@/pages/LabelPrinterPage";
 import { ReportsPage } from "@/pages/ReportsPage";
 import { AmcContractsPage } from "@/pages/AmcContractsPage";
+import { RemindersPage } from "@/pages/RemindersPage";
 import { GrnDetailPage } from "@/pages/GrnDetailPage";
 import { DcDetailPage } from "@/pages/DcDetailPage";
 import { UserManagementPage } from "@/pages/UserManagementPage";
@@ -112,6 +113,7 @@ const router = createBrowserRouter([
           { path: "admin/settings", element: <ProtectedRoute roles="Admin" />, children: [{ index: true, element: <SystemSettingsPage /> }] },
           { path: "chatbot", element: <PlaceholderPage title="AV Inventory assistant" spec="Full-screen chat — for now use the floating widget in the bottom-right." /> },
           { path: "activity", element: <PlaceholderPage title="Activity feed" spec="Real-time event stream via AppSync subscription." /> },
+          { path: "reminders", element: <RemindersPage /> },
           { path: "reports", element: <ProtectedRoute roles="Admin" />, children: [{ index: true, element: <ReportsPage /> }] },
           { path: "labels", element: <ProtectedRoute roles={["Admin", "Logistics"]} />, children: [{ index: true, element: <LabelPrinterPage /> }] },
           { path: "amc", element: <ProtectedRoute roles={["Admin", "Logistics"]} />, children: [{ index: true, element: <AmcContractsPage /> }] },
