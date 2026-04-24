@@ -49,7 +49,7 @@ export function createWafWebAcl(backend: MinimalBackend): void {
 
   const webAcl = new CfnWebACL(stack, "AvInventoryWebAcl", {
     name,
-    description: "AV Inventory Platform — DDoS + common-exploits protection",
+    description: "AV Inventory Platform - DDoS and common exploits protection",
     scope: "CLOUDFRONT", // Amplify Hosting sits behind CloudFront
     defaultAction: { allow: {} },
     visibilityConfig: {
