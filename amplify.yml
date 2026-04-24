@@ -47,16 +47,14 @@ frontend:
     preBuild:
       commands:
         - |
-            cd frontend
             if [ "$AWS_BRANCH" = "main" ] || [ "$AWS_BRANCH" = "master" ]; then export VITE_APP_ENV=prod; elif [ "$AWS_BRANCH" = "staging" ]; then export VITE_APP_ENV=staging; else export VITE_APP_ENV=dev; fi
             echo "VITE_APP_ENV=$VITE_APP_ENV (AWS_BRANCH=$AWS_BRANCH)"
-            npm ci --cache .npm --prefer-offline
+            ( cd frontend && npm ci --cache .npm --prefer-offline )
     build:
       commands:
         - |
-            cd frontend
             if [ "$AWS_BRANCH" = "main" ] || [ "$AWS_BRANCH" = "master" ]; then export VITE_APP_ENV=prod; elif [ "$AWS_BRANCH" = "staging" ]; then export VITE_APP_ENV=staging; else export VITE_APP_ENV=dev; fi
-            npm run build
+            ( cd frontend && npm run build )
   artifacts:
     baseDirectory: frontend/dist
     files:

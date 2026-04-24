@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { AlarmClock, Plus, Trash2 } from "lucide-react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -66,8 +66,6 @@ export function RemindersPage() {
       recurrence: "DAILY",
     },
   });
-  const recurring = form.watch("recurring");
-
   const load = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -251,16 +249,12 @@ export function RemindersPage() {
             ) : null}
           </div>
           <div className="flex items-center gap-2">
-            <Checkbox
-              id="recurring"
-              checked={recurring}
-              onCheckedChange={(c) => form.setValue("recurring", c === true)}
-            />
+            <Checkbox id="recurring" {...form.register("recurring")} />
             <Label htmlFor="recurring" className="font-normal">
               Recurring
             </Label>
           </div>
-          {recurring ? (
+          {form.watch("recurring") ? (
             <div className="space-y-2">
               <Label>Repeat</Label>
               <Select
